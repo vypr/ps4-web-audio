@@ -36,7 +36,7 @@ Each device selects its own mode. Higher-quality modes use more bandwidth and ma
 
 ## Install the PKG
 
-1. Download **`PS4-Web-Audio-No-BG.pkg`** from the GitHub release assets.
+1. Download **`PS4-Web-Audio.pkg`** from the GitHub release assets.
 2. Transfer the PKG to an exFAT USB drive or to the PS4's `/data/pkg/` directory using FTP.
 3. Install the package with GoldHEN's package installer.
 4. Launch **PS4 Web Audio** from the PS4 home screen.
