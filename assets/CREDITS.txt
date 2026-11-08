@@ -1,0 +1,6 @@
+PS4 Web Audio V2 No Background
+Made by vypr
+GitHub: https://github.com/vypr
+
+Native app and webpage branding.
+Web audio LAN stream remains at http://<PS4-IP>:8098/

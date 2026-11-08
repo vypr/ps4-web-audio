@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PS4 Web Audio by vypr — Standard Playback</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#0b1220;color:#eef3ff}*{box-sizing:border-box}
+body{margin:0;padding:24px 14px}main{max-width:740px;margin:auto}.eyebrow{color:#90b8ee;font-size:12px;letter-spacing:.14em;font-weight:700;text-transform:uppercase}
+h1{font-size:clamp(26px,6vw,42px);margin:8px 0 6px}p{color:#aebed6;line-height:1.5}
+.card{background:#172238;border:1px solid #354865;border-radius:18px;padding:20px;margin:18px 0}
+button{cursor:pointer;padding:13px 16px;background:#4f91f7;color:white;border:0;border-radius:10px;font-weight:700;font-size:15px}
+button.secondary{background:#293c58}button:disabled{opacity:.45;cursor:default}.controls{display:flex;flex-wrap:wrap;gap:9px;margin:18px 0}
+label{display:block;color:#d7e5fa;margin:10px 0}.value{color:white;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:#529afd}.badge{display:inline-block;padding:6px 12px;border-radius:100px;background:#2b3b56;color:#b9ceea;font-size:13px}
+.badge.ok{background:#183d33;color:#b2f5cc}.badge.bad{background:#4b282d;color:#ffc3c7}dt{color:#aab8d0;font-size:12px}dd{margin:4px 0 0;font-size:18px;font-weight:700}
+select{appearance:auto;background:#243651;color:#fff;border:1px solid #6581a7;border-radius:9px;padding:12px 10px;font-size:16px;max-width:100%;width:100%}
+.platform{border:1px solid #365375;border-radius:13px;background:#182942;padding:14px;margin:14px 0}.platform label{font-weight:700;margin:0 0 8px}.platform .detail{margin:9px 0 0;font-size:13px;color:#bed1ec}.platform .tip{margin:8px 0 0;font-size:13px;color:#98b5d8}
+dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}.note{font-size:13px;color:#9baac3}code{color:#c0dcff}
+.creator{color:#b2c8e8;font-size:14px;margin:7px 0 18px}.creator strong{color:#eff5ff}.creator a{color:#82b8ff;text-decoration:underline;text-underline-offset:3px}.creator a:hover{color:#c6e2ff}
+.modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:14px 0}
+.mode{border:1px solid #405574;border-radius:12px;padding:11px;cursor:pointer;color:#c6d5ed;background:#1f304a;min-height:105px}
+.mode input{margin:0 0 8px;accent-color:#78afff}.mode strong{display:block;font-size:15px;color:#eff5ff}.mode small{display:block;color:#a1b8d6;line-height:1.4;margin-top:4px}.mode:has(input:checked){border-color:#85baff;background:#253f62}
+@media(max-width:600px){.modes{grid-template-columns:1fr}.mode{min-height:0}dl{gap:9px}dd{font-size:15px}}
+</style></head>
+<body><main><div class="eyebrow">PS4 FW14 · LAN audio · V2</div>
+<h1>Listen to your PS4 anywhere on your LAN</h1>
+<p class="creator">Made by <strong>vypr</strong> · <a href="https://github.com/vypr" target="_blank" rel="noopener noreferrer">github.com/vypr</a></p>
+<p>PS4 → local network → PC/phone browser → speakers or Bluetooth headphones. Every listener chooses their own audio profile. Joining or leaving should not interrupt the other listeners.</p>
+<div class="card">
+<h2 style="margin-top:0">Choose your audio quality</h2>
+<div class="modes" role="radiogroup" aria-label="Audio quality">
+<label class="mode"><input type="radio" name="quality" value="fast"><strong>1 · Fastest</strong><small>24 kHz mono · 16-bit · 0.384 Mb/s<br>Smaller buffer, lowest target latency</small></label>
+<label class="mode"><input type="radio" name="quality" value="balanced" checked><strong>2 · Balanced</strong><small>48 kHz stereo · 16-bit · 1.536 Mb/s<br>Recommended for most devices</small></label>
+<label class="mode"><input type="radio" name="quality" value="studio"><strong>3 · Highest quality</strong><small>48 kHz stereo · float32 · 3.072 Mb/s<br>Lossless source precision, larger safety buffer</small></label>
+</div>
+<p class="note">Fastest favors latency over fidelity and buffering. Highest quality preserves source precision, but depends more on LAN bandwidth and adds playback delay. Actual delay depends on your browser, network and Bluetooth headset.</p>
+<div class="platform">
+<label for="platform">Phone playback compatibility</label>
+<select id="platform" aria-label="Select phone playback compatibility">
+<option value="auto">Auto detect (recommended)</option>
+<option value="ios">iPhone / iPad</option>
+<option value="android">Android</option>
+<option value="desktop">Desktop / Other</option>
+</select>
+<div class="detail" id="platformSummary" role="status" aria-live="polite">Detecting this device…</div>
+<div class="tip" id="platformHelp"></div>
+</div>
+<span class="badge" id="state">Not playing</span>
+<div class="controls"><button id="listen">▶ Listen to PS4</button><button id="tone" class="secondary">♫ Network test tone</button><button id="stop" class="secondary" disabled>■ Stop</button></div>
+<label>Browser volume: <span class="value" id="voltxt">100%</span></label><input type="range" id="vol" min="0" max="150" step="5" value="100">
+<p class="note">Changing your quality restarts playback only on <strong>this device</strong>. Connect up to eight simultaneous listeners; other phones or PCs can choose a different profile.</p>
+</div>
+<div class="card"><h2 style="margin-top:0">Diagnostics</h2>
+<dl><div><dt>PS4 capture</dt><dd id="capture">Checking…</dd></div><div><dt>Browser buffer</dt><dd id="buffer">0 ms</dd></div><div><dt>Browser underruns</dt><dd id="und">0</dd></div><div><dt>PS4 packets</dt><dd id="packets">0</dd></div><div><dt>PS4 source underruns</dt><dd id="psund">0</dd></div><div><dt>Active listeners</dt><dd id="listeners">0 / 8</dd></div><div><dt>Disconnects handled</dt><dd id="disconnects">0</dd></div><div><dt>Slow clients dropped</dt><dd id="slow">0</dd></div><div><dt>Audio format</dt><dd id="format">48 kHz stereo PCM16</dd></div></dl></div>
+<p class="note">Local-network HTTP only (port 8098); no login or encryption. Do not port-forward this service. This is the standard low-latency player, without experimental background playback. iPhone browsers may pause audio when the screen locks. Keep your proven V1 and V14 payloads available for rollback.</p>
+<footer class="creator" style="text-align:center;padding:18px 0 26px">Made by <strong>vypr</strong> · <a href="https://github.com/vypr" target="_blank" rel="noopener noreferrer">github.com/vypr</a></footer>
+</main>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const PLATFORM_STORE='ps4_web_audio_v2_phone_mode';
+const PLATFORM_LABELS={ios:'iPhone / iPad',android:'Android',desktop:'Desktop / Other'};
+function detectPlatform(){
+ const ua=navigator.userAgent||'';
+ // iPadOS desktop-like Safari commonly reports MacIntel and touch support.
+ if(/iPhone|iPad|iPod/i.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1))return 'ios';
+ if(/Android/i.test(ua)||(/android/i.test(navigator.userAgentData?.platform||'')))return 'android';
+ return 'desktop';
+}
+function selectedPlatform(){const mode=$('platform').value;return mode==='auto'?detectPlatform():mode;}
+function platformHint(p){
+ if(p==='ios')return 'iPhone/iPad: Listen to PS4 requests media playback routing (when supported) to help use the built-in speaker even in Silent Mode. Playback may stop when the screen locks.';
+ if(p==='android')return 'Android: use Listen to PS4 for low-latency audio. Screen-lock playback depends on your browser and device.';
+ return 'PC/other: use Listen to PS4 for low-latency streaming; choose a quality profile above.';
+}
+function showPlatform(){
+ const detected=detectPlatform(),mode=$('platform').value,chosen=selectedPlatform();
+ $('platformSummary').textContent='Detected: '+PLATFORM_LABELS[detected]+' · Using: '+PLATFORM_LABELS[chosen]+(mode==='auto'?' (automatic)':' (manual override)');
+ $('platformHelp').textContent=platformHint(chosen);
+}
+try{const stored=localStorage.getItem(PLATFORM_STORE);if(['auto','ios','android','desktop'].includes(stored))$('platform').value=stored;}catch(_){}
+showPlatform();
+$('platform').addEventListener('change',()=>{
+ try{localStorage.setItem(PLATFORM_STORE,$('platform').value);}catch(_){}
+ showPlatform();
+ // Restart only THIS listener; other devices and PS4 service are unaffected.
+
+});
+const FORMATS={
+ fast:{rate:24000,channels:1,bytes:2,kind:'int16',bufferMs:65,name:'24 kHz mono PCM16'},
+ balanced:{rate:48000,channels:2,bytes:4,kind:'int16',bufferMs:125,name:'48 kHz stereo PCM16'},
+ studio:{rate:48000,channels:2,bytes:8,kind:'float32',bufferMs:240,name:'48 kHz stereo Float32'}
+};
+let ctx=null,processor=null,abort=null,reader=null,playing=false,active='',session=0;
+let framesL,framesR,wseq=0,rseq=0,underruns=0,ready=false;
+const LENGTH=131072,MASK=LENGTH-1;
+let gain=1,profile=FORMATS.balanced;
+function selected(){return document.querySelector('input[name="quality"]:checked').value;}
+function setBadge(msg,cls=''){$('state').textContent=msg;$('state').className='badge '+cls;}
+function reset(){framesL=new Float32Array(LENGTH);framesR=new Float32Array(LENGTH);wseq=0;rseq=0;underruns=0;ready=false;}
+function target(){return Math.round(profile.rate*profile.bufferMs/1000);}
+function appendPCM(bytes){
+ const dv=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);const unit=profile.bytes;
+ for(let k=0;k+unit<=bytes.byteLength;k+=unit){
+   let l,r;
+   if(profile.kind==='float32'){l=dv.getFloat32(k,true);r=dv.getFloat32(k+4,true);}
+   else {l=dv.getInt16(k,true)/32768;r=profile.channels===1?l:dv.getInt16(k+2,true)/32768;}
+   let p=wseq&MASK;framesL[p]=Number.isFinite(l)?l:0;framesR[p]=Number.isFinite(r)?r:0;wseq++;
+ }
+ if(wseq-rseq>LENGTH-2048){rseq=Math.max(0,wseq-target());ready=false;}
+}
+function playback(e){
+ let outL=e.outputBuffer.getChannelData(0),outR=e.outputBuffer.getChannelData(1);
+ let tgt=target(),step=profile.rate/ctx.sampleRate;
+ if(!ready){if(wseq-rseq<tgt){outL.fill(0);outR.fill(0);return;}rseq=wseq-tgt;ready=true;}
+ if(wseq-rseq>profile.rate*0.6)rseq=wseq-tgt;
+ let buffered=wseq-rseq;
+ let correction=Math.max(-0.005,Math.min(0.005,(buffered-tgt)/profile.rate*0.08));step*=1+correction;
+ for(let i=0;i<outL.length;i++){
+  if(wseq-rseq<2){outL.fill(0,i);outR.fill(0,i);ready=false;underruns++;break;}
+  let base=Math.floor(rseq),f=rseq-base,a=base&MASK,b=(base+1)&MASK;
+  outL[i]=(framesL[a]+(framesL[b]-framesL[a])*f)*gain;
+  outR[i]=(framesR[a]+(framesR[b]-framesR[a])*f)*gain;
+  rseq+=step;
+ }
+}
+function stop(){
+ playing=false;session++;
+ const oldAbort=abort,oldReader=reader,oldProcessor=processor,oldCtx=ctx;
+ abort=null;reader=null;processor=null;ctx=null;
+ if(oldAbort)oldAbort.abort();
+ if(oldReader){try{const p=oldReader.cancel();if(p&&p.catch)p.catch(()=>{});}catch(_){}}
+ if(oldProcessor){oldProcessor.disconnect();oldProcessor.onaudioprocess=null;}
+ if(oldCtx){try{const p=oldCtx.close();if(p&&p.catch)p.catch(()=>{});}catch(_){}}
+ $('listen').disabled=false;$('tone').disabled=false;$('stop').disabled=true;
+ if(navigator.mediaSession)navigator.mediaSession.playbackState='none';
+ setBadge('Not playing');
+}
+// iOS Safari can treat AudioContext output as ambient audio unless the page
+// explicitly requests the media playback route. Request this before creating
+// the AudioContext, while still handling
+// older/other browsers which do not expose navigator.audioSession.
+function requestPlaybackAudioSession(){
+ try{
+  if((detectPlatform()==='ios'||selectedPlatform()==='ios')&&navigator.audioSession){
+   navigator.audioSession.type='playback';
+  }
+ }catch(_){/* audioSession is optional; continue with normal playback. */}
+}
+async function start(which){
+ // Must run synchronously in the user's tap, before the first await.
+ requestPlaybackAudioSession();
+ await stop();reset();active=which;profile=FORMATS[selected()];$('format').textContent=profile.name;
+ const my=++session;playing=true;
+ $('listen').disabled=true;$('tone').disabled=true;$('stop').disabled=false;
+ try{
+  ctx=new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
+  await ctx.resume();
+  if(!playing||my!==session){return;}
+  processor=ctx.createScriptProcessor(2048,0,2);processor.onaudioprocess=playback;processor.connect(ctx.destination);
+ }catch(e){await stop();setBadge('Audio output error: '+e.message,'bad');return;}
+ setBadge(which==='tone'?'Network tone starting…':'Connecting to PS4…');
+ streamLoop(which,selected(),my);
+}
+async function streamLoop(which,quality,my){
+ while(playing&&my===session){
+  try{
+   const controller=new AbortController();abort=controller;
+   const path=(which==='tone'?'/tone.pcm?quality=':'/stream.pcm?quality=')+quality;
+   const response=await fetch(path,{cache:'no-store',signal:controller.signal});
+   if(!response.ok||!response.body)throw Error('HTTP '+response.status+' — no stream available');
+   if(my!==session)return;
+   setBadge(which==='tone'?'PS4 network test tone':'Listening to PS4','ok');
+   const r=response.body.getReader();reader=r;let partial=new Uint8Array(0);
+   while(playing&&my===session){
+    const {value,done}=await r.read();if(done)break;
+    const input=new Uint8Array(partial.length+value.length);input.set(partial);input.set(value,partial.length);
+    const usable=input.length-(input.length%profile.bytes);
+    if(usable)appendPCM(input.subarray(0,usable));partial=input.slice(usable);
+   }
+  }catch(e){if(playing&&my===session)setBadge('Reconnecting: '+e.message,'bad');}
+  if(my!==session)break;
+  reader=null;abort=null;
+  if(playing){reset();await new Promise(resolve=>setTimeout(resolve,1300));}
+ }
+}
+$('listen').onclick=()=>start('game');$('tone').onclick=()=>start('tone');$('stop').onclick=()=>stop();
+for(const e of document.querySelectorAll('input[name="quality"]'))e.onchange=()=>{if(playing)start(active);else{$('format').textContent=FORMATS[selected()].name;}};
+$('vol').oninput=()=>{gain=Number($('vol').value)/100;$('voltxt').textContent=$('vol').value+'%';};
+async function status(){
+ try{
+  let s=await (await fetch('/status',{cache:'no-store'})).json();
+  $('capture').textContent=!s.capture_open?'Unavailable':s.capture_fresh?'Live':'Idle';
+  $('packets').textContent=s.packets;$('psund').textContent=s.underruns;
+  $('listeners').textContent=s.clients+' / '+(s.max_listeners||8);
+  $('disconnects').textContent=s.disconnected||0;$('slow').textContent=s.slow_clients||0;
+ }catch(_){$('capture').textContent='Offline';}
+ $('buffer').textContent=Math.max(0,Math.round((wseq-rseq)/profile.rate*1000))+' ms';
+ $('und').textContent=underruns;
+}
+setInterval(status,1500);status();
+</script></body></html>
