@@ -113,7 +113,6 @@ UI_PREVIEW.png              Interface preview
 - **Page won't open:** Check that the PS4 server shows Online, confirm both devices are on the same LAN, and verify the PS4 IP address.
 - **Server won't start:** Enable GoldHEN Payload Server (9090), then use **✕ Start** again.
 - **No sound:** Press **Listen to PS4**, verify the listening device's output/volume, and try **Balanced** quality or the **Network test tone**.
-- **Phone stops playing when locked:** This is the **No Background** edition. Screen-off playback is not supported reliably, particularly on iPhone.
 - **Multiple audio servers:** Stop the older standalone payload before starting the PKG's bundled server; both use port **8098**.
 
 ## Donations
