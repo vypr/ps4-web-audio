@@ -66,7 +66,7 @@ cp "$ROOT/assets/BTA-Web-Audio-FW14-V2-NO-BG.bin" "$PKGDIR/assets/BTA-Web-Audio-
 cp "$ROOT/assets/CREDITS.txt" "$PKGDIR/assets/CREDITS.txt"
 echo '== 3/5 Generate param.sfo =='
 export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
-PKGTOOL="$TOOL_BIN/PkgTool.Core"
+PKGTOOL="${PKGTOOL:-$TOOL_BIN/PkgTool.Core}"
 "$PKGTOOL" sfo_new "$PKGDIR/sce_sys/param.sfo"
 sfo(){ "$PKGTOOL" sfo_setentry "$PKGDIR/sce_sys/param.sfo" "$1" --type "$2" --maxsize "$3" --value "$4"; }
 sfo APP_TYPE Integer 4 1
