@@ -64,16 +64,10 @@ static void wa_disk(int cx,int cy,int radius,uint32_t color){
  for(int y=-radius;y<=radius;y++)for(int x=-radius;x<=radius;x++)
   if(x*x+y*y<=radius*radius)wa_pixel(cx+x,cy+y,color);
 }
-static void wa_ring(int cx,int cy,int radius,int weight,uint32_t color){
- int outer=radius*radius,inner=(radius-weight)*(radius-weight);
- for(int y=-radius;y<=radius;y++)for(int x=-radius;x<=radius;x++){
-  int d=x*x+y*y;if(d<=outer&&d>=inner)wa_pixel(cx+x,cy+y,color);
- }
-}
-enum wa_button_shape{WA_BTN_CROSS,WA_BTN_SQUARE,WA_BTN_TRIANGLE,WA_BTN_CIRCLE};
+enum wa_button_shape{WA_BTN_CROSS,WA_BTN_SQUARE,WA_BTN_TRIANGLE};
 static void wa_controller_icon(int cx,int cy,enum wa_button_shape shape){
- static const uint32_t colors[]={0x67b5ffu,0xf09bdeu,0x7bf0a8u,0xff858fu};
- uint32_t color=colors[(unsigned)shape<4?(unsigned)shape:0];
+ static const uint32_t colors[]={0x67b5ffu,0xf09bdeu,0x7bf0a8u};
+ uint32_t color=colors[(unsigned)shape<3?(unsigned)shape:0];
  wa_disk(cx,cy,27,0x23405cu);
  switch(shape){
   case WA_BTN_CROSS:
@@ -90,9 +84,6 @@ static void wa_controller_icon(int cx,int cy,enum wa_button_shape shape){
    wa_line(cx,cy-17,cx-17,cy+13,5,color);
    wa_line(cx-17,cy+13,cx+17,cy+13,5,color);
    wa_line(cx+17,cy+13,cx,cy-17,5,color);
-   break;
-  case WA_BTN_CIRCLE:
-   wa_ring(cx,cy,16,5,color);
    break;
  }
 }
@@ -142,9 +133,9 @@ static void wa_render(const struct wa_status *s,const char*ip,const char*note){
  wa_control_row(225,WA_BTN_CROSS,   "START",  "Start or retry the server");
  wa_control_row(297,WA_BTN_SQUARE,  "STOP",   "Stop the audio stream");
  wa_control_row(369,WA_BTN_TRIANGLE,"REFRESH","Update server status");
- wa_control_row(441,WA_BTN_CIRCLE,  "CLOSE",  "Audio keeps playing");
- wa_text(832,530,"Exit the app anytime.",1,WA_MUTED);
- wa_text(832,570,"github.com/vypr",1,WA_GREEN);
+ wa_text(832,470,"Close with the PS button.",1,WA_MUTED);
+ wa_text(832,510,"Audio keeps playing.",1,WA_MUTED);
+ wa_text(832,550,"github.com/vypr",1,WA_GREEN);
 
  /* Compact status at bottom: don't display outdated "starting" after online. */
  wa_rect(52,624,1176,57,WA_PANEL2);

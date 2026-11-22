@@ -14,6 +14,7 @@
 - **Three audio modes**, from lower latency to maximum source precision.
 - **Automatic iPhone/iPad, Android, and desktop detection**, with a manual override.
 - **Disconnect handling** so one listener leaving should not interrupt the others.
+- **Automatic recovery** of a stale server holding port 8098, and automatic restart after an IP/network change.
 - **Network test tone**, browser volume control, and playback diagnostics.
 - **No Background edition:** the experimental background/WAV player is not included.
 
@@ -67,7 +68,7 @@ Other listeners can connect to the same address and choose different settings in
 | **✕ Cross** | Start / retry the audio server |
 | **□ Square** | Stop the audio server |
 | **△ Triangle** | Refresh status |
-| **○ Circle** | Close the app; leave the server running |
+| **PS button** | Close the app normally; the server keeps running in the background |
 
 The app attempts to start its bundled server when launched if one is not already running.
 
@@ -113,6 +114,8 @@ UI_PREVIEW.png              Interface preview
 - **Page won't open:** Check that the PS4 server shows Online, confirm both devices are on the same LAN, and verify the PS4 IP address.
 - **Server won't start:** Enable GoldHEN Payload Server (9090), then use **✕ Start** again.
 - **No sound:** Press **Listen to PS4**, verify the listening device's output/volume, and try **Balanced** quality or the **Network test tone**.
+- **Port 8098 stays busy after a crash:** The app now asks the stale worker to stop and starts a fresh one automatically. If the port is held by an unrelated program, stop that program and press **✕ Start** again.
+- **Changed network or IP:** The app detects the new address within a few seconds and restarts the server on it; no manual restart is needed.
 - **Multiple audio servers:** Stop the older standalone payload before starting the PKG's bundled server; both use port **8098**.
 
 ## Donations

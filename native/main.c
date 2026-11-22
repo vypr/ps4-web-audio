@@ -29,6 +29,10 @@ static uint64_t pad_retry;
 static char notice[144];
 static struct wa_status web_audio_status;
 static char lan_ip[40]="<PS4 IP>";
+static int port_busy;         /* something is listening on 8098 */
+static int restart_wait;      /* waiting for the old worker to release 8098 */
+static uint64_t restart_deadline;
+static int ip_valid;          /* lan_ip holds a real detected address */
 
 static void log_msg(const char *msg){
  int f=sceKernelOpen(WA_LOG_PATH,0x209,0644);
@@ -54,7 +58,9 @@ static int send_all(int fd,const void*data,size_t len){
  return 0;
 }
 static int http_get_status(void){
- int fd=local_socket(8098);if(fd<0){web_audio_status.online=0;return -1;}
+ int fd=local_socket(8098);
+ if(fd<0){port_busy=0;web_audio_status.online=0;return -1;}
+ port_busy=1;
  static const char request[]="GET /status HTTP/1.1\r\nHost: 127.0.0.1:8098\r\nConnection: close\r\n\r\n";
  if(send_all(fd,request,sizeof(request)-1)<0){close(fd);web_audio_status.online=0;return -1;}
  char reply[2048];size_t n=0;
@@ -77,21 +83,43 @@ static int http_get_status(void){
  if(v){v+=11;size_t j=0;while(v[j]&&v[j]!='\"'&&j+1<sizeof(web_audio_status.version)){web_audio_status.version[j]=v[j];j++;}web_audio_status.version[j]=0;}
  return 0;
 }
-static int try_lan_ip(void){
- int fd=socket(AF_INET,SOCK_DGRAM,0);if(fd<0)return -1;
- struct sockaddr_in dst;memset(&dst,0,sizeof(dst));dst.sin_len=sizeof(dst);
- dst.sin_family=AF_INET;dst.sin_port=htons(53);dst.sin_addr.s_addr=htonl(0xc0a80101u);
- int rc=connect(fd,(struct sockaddr*)&dst,sizeof(dst));
- if(rc==0){struct sockaddr_in src;socklen_t len=sizeof(src);memset(&src,0,sizeof(src));
-  if(!getsockname(fd,(struct sockaddr*)&src,&len)){
-   uint32_t ip=ntohl(src.sin_addr.s_addr);
-   if(ip!=0&&ip!=0x7f000001u){snprintf(lan_ip,sizeof(lan_ip),"%u.%u.%u.%u",(ip>>24)&255,(ip>>16)&255,(ip>>8)&255,ip&255);close(fd);return 0;}
+/* Route a UDP socket to a few well-known gateways and read the chosen source
+ * address. Trying class C, class A and a public address keeps detection working
+ * after the console moves between networks. */
+static int detect_lan_ip(char *out,size_t cap){
+ static const uint32_t probes[]={0xc0a80101u,0x0a000001u,0x08080808u}; /* 192.168.1.1, 10.0.0.1, 8.8.8.8 */
+ for(unsigned i=0;i<sizeof(probes)/sizeof(probes[0]);i++){
+  int fd=socket(AF_INET,SOCK_DGRAM,0);if(fd<0)continue;
+  struct sockaddr_in dst;memset(&dst,0,sizeof(dst));dst.sin_len=sizeof(dst);
+  dst.sin_family=AF_INET;dst.sin_port=htons(53);dst.sin_addr.s_addr=htonl(probes[i]);
+  int rc=connect(fd,(struct sockaddr*)&dst,sizeof(dst));
+  if(rc==0){struct sockaddr_in src;socklen_t len=sizeof(src);memset(&src,0,sizeof(src));
+   if(!getsockname(fd,(struct sockaddr*)&src,&len)){
+    uint32_t ip=ntohl(src.sin_addr.s_addr);
+    if(ip!=0&&ip!=0x7f000001u){
+     snprintf(out,cap,"%u.%u.%u.%u",(ip>>24)&255,(ip>>16)&255,(ip>>8)&255,ip&255);
+     close(fd);return 0;
+    }
+   }
   }
+  close(fd);
  }
- close(fd);return -1;
+ return -1;
 }
-static int start_payload(void){
- if(web_audio_status.online){set_note("Server is already running. Open the URL on your device.");return 0;}
+static int try_lan_ip(void){
+ char ip[40];
+ if(detect_lan_ip(ip,sizeof(ip)))return -1;
+ snprintf(lan_ip,sizeof(lan_ip),"%s",ip);ip_valid=1;
+ return 0;
+}
+static int write_stop_request(void){
+ sceKernelMkdir("/data/ps4_web_audio",0777);
+ int fd=sceKernelOpen(WA_STOP_PATH,0x601,0666);
+ if(fd<0)return -1;
+ sceKernelWrite(fd,"stop\n",5);sceKernelClose(fd);
+ return 0;
+}
+static int send_payload_now(void){
  static uint8_t payload[WA_PAYLOAD_MAX];
  int f=sceKernelOpen(WA_PAYLOAD_PATH,0,0);
  if(f<0){set_note("Bundled No-BG payload not found. Package installation incomplete.");return -1;}
@@ -109,14 +137,46 @@ static int start_payload(void){
  int rc=send_all(fd,payload,used);
  close(fd);
  if(rc){set_note("Unable to send the payload to GoldHEN.");return -1;}
- set_note("Payload sent. The web audio server is starting...");return 0;
+ set_note("Payload sent. The web audio server is starting...");
+ return 0;
+}
+/* Ask the old worker to exit, then let the main loop send a fresh payload once
+ * port 8098 is actually free. This is what recovers a stale or half-dead server. */
+static void queue_restart(const char *reason){
+ write_stop_request();
+ web_audio_status.online=0;
+ restart_wait=1;
+ restart_deadline=sceKernelGetProcessTime()+4000000u;
+ set_note(reason);
+}
+static void tick_restart(uint64_t now){
+ if(!restart_wait)return;
+ int fd=local_socket(8098);
+ if(fd>=0)close(fd);
+ if(fd<0){
+  restart_wait=0;
+  web_audio_status.online=0;
+  if(!send_payload_now()){
+   char msg[144];
+   snprintf(msg,sizeof(msg),"Server restarted on %s. Open the URL on your device.",lan_ip);
+   set_note(msg);
+  }
+  return;
+ }
+ if(now>=restart_deadline){
+  restart_wait=0;
+  set_note("Port 8098 is still busy. Stop the old server and retry.");
+ }
+}
+static void start_payload(void){
+ if(restart_wait){set_note("Waiting for the old server to release port 8098...");return;}
+ if(web_audio_status.online){set_note("Server is already running. Open the URL on your device.");return;}
+ if(port_busy){queue_restart("Stale server on port 8098. Restarting...");return;}
+ send_payload_now();
 }
 static void stop_server(void){
  if(!web_audio_status.online){set_note("Server is already offline.");return;}
- sceKernelMkdir("/data/ps4_web_audio",0777);
- int fd=sceKernelOpen(WA_STOP_PATH,0x601,0666);
- if(fd<0){set_note("Unable to write the stop request.");return;}
- sceKernelWrite(fd,"stop\n",5);sceKernelClose(fd);
+ if(write_stop_request()<0){set_note("Unable to write the stop request.");return;}
  set_note("Stop requested. The streaming worker will exit shortly.");
 }
 static unsigned get_pad(uint64_t now){
@@ -156,13 +216,27 @@ int main(void){
  try_lan_ip();http_get_status();
  if(web_audio_status.online)set_note("Existing Web Audio service detected. Ready.");
  else {set_note("Starting bundled Web Audio V2 No-BG service...");start_payload();}
- uint64_t poll=0;unsigned previous=0;int armed=0,which=0;long flip=0;
+ uint64_t poll=0,ip_poll=0;unsigned previous=0;int armed=0,which=0;long flip=0;
  for(;;){
   uint64_t now=sceKernelGetProcessTime();
   if(now>=poll){http_get_status();poll=now+1000000;}
+  if(now>=ip_poll){
+   ip_poll=now+2000000;
+   char detected[40];
+   if(!detect_lan_ip(detected,sizeof(detected))){
+    if(!ip_valid){snprintf(lan_ip,sizeof(lan_ip),"%s",detected);ip_valid=1;}
+    else if(strcmp(detected,lan_ip)){
+     snprintf(lan_ip,sizeof(lan_ip),"%s",detected);
+     if(web_audio_status.online||port_busy)queue_restart("Network changed. Restarting the Web Audio server...");
+     else set_note("Network changed. Press X to start the Web Audio server.");
+    }
+   }
+  }
+  tick_restart(now);
   unsigned buttons=get_pad(now);if(!armed){previous=buttons;armed=1;}
   unsigned pressed=buttons&~previous;previous=buttons;
-  if(pressed&ORBIS_PAD_BUTTON_CIRCLE)break;
+  /* Circle is intentionally unbound: close the app with the PS button. The
+   * injected payload runs in another process and keeps streaming. */
   if(pressed&ORBIS_PAD_BUTTON_CROSS){if(!web_audio_status.online)start_payload();else set_note("Already online. Connect via browser URL shown.");}
   if(pressed&ORBIS_PAD_BUTTON_SQUARE)stop_server();
   if(pressed&ORBIS_PAD_BUTTON_TRIANGLE){http_get_status();try_lan_ip();set_note(web_audio_status.online?"Refreshed server status.":"Offline. Press X to start Web Audio.");}
